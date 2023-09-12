@@ -1003,3 +1003,41 @@ class TestPadDynamicalDecoupling(ControlFlowTestCase):
         self.assertNotEqual(delay_dict[1], delay_dict[2])
         self.assertNotEqual(delay_dict[3], delay_dict[4])
         self.assertEqual(delay_dict[0], delay_dict[2])
+
+    def test_no_unused_qubits(self):
+        """Test DD with if_test circuit that unused qubits are untouched and not scheduled.
+
+        This ensures that programs don't have unnecessary information for unused qubits.
+        Which might hurt performance in later executon stages.
+        """
+
+        dd_sequence = [XGate(), XGate()]
+        pm = PassManager(
+            [
+                ASAPScheduleAnalysis(self.durations),
+                PadDynamicalDecoupling(
+                    self.durations,
+                    dd_sequence,
+                    pulse_alignment=1,
+                    sequence_min_length_ratios=[0.0],
+                ),
+            ]
+        )
+
+        qc = QuantumCircuit(3, 1)
+        qc.measure(0, 0)
+        qc.x(1)
+        with qc.if_test((0, True)):
+            qc.x(1)
+        qc.measure(0, 0)
+        with qc.if_test((0, True)):
+            qc.x(0)
+        qc.x(1)
+
+        qc_dd = pm.run(qc)
+
+        import pdb;pdb.set_trace()
+        dont_use = qc_dd.qubits[-1]
+        for op in qc_dd.data:
+            self.assertNotIn(dont_use, op.qubits)
+

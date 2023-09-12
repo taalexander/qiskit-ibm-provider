@@ -1892,3 +1892,31 @@ class TestALAPSchedulingAndPaddingPass(ControlFlowTestCase):
             expected.delay(160, qr1[6])
 
         self.assertEqual(expected, scheduled)
+
+    def test_no_unused_qubits(self):
+        """Test DD with if_test circuit that unused qubits are untouched and not scheduled.
+
+        This ensures that programs don't have unnecessary information for unused qubits.
+        Which might hurt performance in later executon stages.
+        """
+
+        durations = DynamicCircuitInstructionDurations(
+            [("x", None, 200), ("measure", None, 840)]
+        )
+        pm = PassManager([ALAPScheduleAnalysis(durations), PadDelay()])
+
+        qc = QuantumCircuit(3, 1)
+        qc.measure(0, 0)
+        qc.x(1)
+        with qc.if_test((0, True)):
+            qc.x(1)
+        qc.measure(0, 0)
+        with qc.if_test((0, True)):
+            qc.x(0)
+        qc.x(1)
+
+        scheduled = pm.run(qc)
+
+        dont_use = scheduled.qubits[-1]
+        for op in scheduled.data:
+            self.assertNotIn(dont_use, op.qubits)
